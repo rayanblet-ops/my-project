@@ -75,8 +75,17 @@ export const Login: React.FC = () => {
       navigate('/');
     } catch (error: any) {
       console.error('Google sign in error:', error);
-      if (error.code !== 'auth/popup-closed-by-user') {
-        setError('Ошибка при входе через Google');
+      if (error.code === 'auth/popup-closed-by-user') {
+        // Пользователь закрыл окно - не показываем ошибку
+        return;
+      } else if (error.code === 'auth/popup-blocked') {
+        setError('Всплывающее окно заблокировано. Разрешите всплывающие окна для этого сайта в настройках браузера.');
+      } else if (error.code === 'permission-denied' || error.message?.includes('permission')) {
+        setError('Ошибка доступа к базе данных. Настройте правила Firestore (см. FIREBASE_RULES_FIX.md)');
+      } else if (error.message) {
+        setError(error.message);
+      } else {
+        setError('Ошибка при входе через Google. Проверьте консоль браузера (F12) для деталей.');
       }
     } finally {
       setIsLoading(false);

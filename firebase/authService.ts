@@ -80,42 +80,70 @@ export const authService = {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
+      console.log('Google sign-in successful, user ID:', user.uid);
+      
       // Проверяем, есть ли профиль в Firestore
-      const existingProfile = await this.getUserProfile(user.uid);
-      if (!existingProfile) {
-        // Создаем профиль для нового пользователя
-        const profile: UserProfile = {
-          name: user.displayName || 'Пользователь',
-          handle: `@${user.email?.split('@')[0] || 'user'}`,
-          email: user.email || '',
-          avatarUrl: user.photoURL || `https://placehold.co/150x150/2563eb/fff?text=${(user.displayName || 'U').charAt(0).toUpperCase()}`,
-          description: 'Пользователь YouTube',
-          country: 'RU',
-          language: 'Русский',
-          theme: 'dark',
-          notifications: {
-            subscriptions: true,
-            recommended: false,
-            activity: true,
-            emailDigest: false,
-          },
-          playback: {
-            autoplay: true,
-            subtitles: false,
-            quality: 'auto',
-          },
-          privacy: {
-            privatePlaylists: true,
-            privateSubscriptions: false,
-          }
-        };
-        
-        await this.setUserProfile(user.uid, profile);
+      try {
+        const existingProfile = await this.getUserProfile(user.uid);
+        if (!existingProfile) {
+          console.log('Profile not found, creating new profile...');
+          // Создаем профиль для нового пользователя
+          const profile: UserProfile = {
+            name: user.displayName || 'Пользователь',
+            handle: `@${user.email?.split('@')[0] || 'user'}`,
+            email: user.email || '',
+            avatarUrl: user.photoURL || `https://placehold.co/150x150/2563eb/fff?text=${(user.displayName || 'U').charAt(0).toUpperCase()}`,
+            description: 'Пользователь YouTube',
+            country: 'RU',
+            language: 'Русский',
+            theme: 'dark',
+            notifications: {
+              subscriptions: true,
+              recommended: false,
+              activity: true,
+              emailDigest: false,
+            },
+            playback: {
+              autoplay: true,
+              subtitles: false,
+              quality: 'auto',
+            },
+            privacy: {
+              privatePlaylists: true,
+              privateSubscriptions: false,
+            }
+          };
+          
+          await this.setUserProfile(user.uid, profile);
+          console.log('Profile created successfully');
+        } else {
+          console.log('Profile found, using existing profile');
+        }
+      } catch (profileError: any) {
+        console.error('Error with user profile:', profileError);
+        // Если ошибка с профилем, но пользователь авторизован - продолжаем
+        if (profileError?.code === 'permission-denied') {
+          console.error('⚠️ ОШИБКА: Правила Firestore блокируют доступ к коллекции "users"!');
+          console.error('Настройте правила в Firebase Console > Firestore Database > Rules');
+          console.error('См. файл FIREBASE_RULES_FIX.md для инструкций');
+          // Продолжаем, но пользователь может не иметь профиля
+        } else {
+          // Для других ошибок пробрасываем дальше
+          throw profileError;
+        }
       }
       
       return user;
     } catch (error: any) {
       console.error('Error signing in with Google:', error);
+      if (error?.code === 'auth/popup-closed-by-user') {
+        // Пользователь закрыл окно - это не ошибка
+        throw error;
+      } else if (error?.code === 'auth/popup-blocked') {
+        throw new Error('Всплывающее окно было заблокировано браузером. Разрешите всплывающие окна для этого сайта.');
+      } else if (error?.code === 'auth/unauthorized-domain') {
+        throw new Error('Домен не авторизован. Проверьте настройки Firebase Authentication.');
+      }
       throw error;
     }
   },
